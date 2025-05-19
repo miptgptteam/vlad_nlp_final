@@ -1,7 +1,12 @@
 import argparse
 import os
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding, get_cosine_schedule_with_warmup
+from transformers import (
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
+    DataCollatorWithPadding,
+    get_cosine_schedule_with_warmup,
+)
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 import torch
@@ -32,12 +37,44 @@ def load_data(train_path, test_path):
 
 
 def preprocess_datasets(train_ds, valid_ds, test_ds, tokenizer):
+    """Insert entity markup and tokenize."""
+
+    def add_entity_tokens(batch):
+        texts = []
+        for sent, start, end in zip(
+            batch["sentence"],
+            batch["entity_pos_start_rel"],
+            batch["entity_pos_end_rel"],
+        ):
+            marked = (
+                sent[:start] + "<ent>" + sent[start:end] + "</ent>" + sent[end:]
+            )
+            texts.append(marked)
+        batch["text"] = texts
+        return batch
+
     def tokenize(batch):
-        return tokenizer(batch["sentence"], truncation=True)
+        return tokenizer(batch["text"], truncation=True)
+
+    train_ds = train_ds.map(add_entity_tokens, batched=True)
+    valid_ds = valid_ds.map(add_entity_tokens, batched=True)
+    test_ds = test_ds.map(add_entity_tokens, batched=True)
 
     train_ds = train_ds.map(tokenize, batched=True)
     valid_ds = valid_ds.map(tokenize, batched=True)
     test_ds = test_ds.map(tokenize, batched=True)
+
+    remove_cols = [
+        "sentence",
+        "entity",
+        "entity_tag",
+        "entity_pos_start_rel",
+        "entity_pos_end_rel",
+        "text",
+    ]
+    train_ds = train_ds.remove_columns([c for c in remove_cols if c in train_ds.column_names])
+    valid_ds = valid_ds.remove_columns([c for c in remove_cols if c in valid_ds.column_names])
+    test_ds = test_ds.remove_columns([c for c in remove_cols if c in test_ds.column_names])
     return train_ds, valid_ds, test_ds
 
 
@@ -59,6 +96,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    tokenizer.add_tokens(["<ent>", "</ent>"])
     train_ds, valid_ds, test_ds = load_data(args.train_path, args.test_path)
 
     # Map labels -1,0,1 to 0,1,2 for training
@@ -74,7 +112,10 @@ def main():
     valid_loader = make_dataloader(valid_ds, tokenizer, args.batch_size)
     test_loader = make_dataloader(test_ds, tokenizer, args.batch_size)
 
-    model = AutoModelForSequenceClassification.from_pretrained(args.model_name, num_labels=len(label_list))
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model_name, num_labels=len(label_list)
+    )
+    model.resize_token_embeddings(len(tokenizer))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
