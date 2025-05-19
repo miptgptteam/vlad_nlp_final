@@ -1,39 +1,16 @@
 - name: baseline-bert
   entry: train_and_predict.py
-  description: Fine-tune ruBERT and predict on test
-
+  description: fix baseline for following train and test structure
 ## baseline-bert
 
-### Краткая цель
-Скрипт `train_and_predict.py` **дообучает** ai-forever/ruRoberta-large на `data/train.json`  
-и **делает инференс** на `data/test.json`, сохраняя `prediction.csv`  
-(колонки `id,label`) и лучший чекпойнт в `checkpoints/`.
+### цель
+Нужно исправить train_and_predict.py чтобы он правильно работал со структурой данных
 
-для шедулинга можно попробовать
-https://github.com/katsura-jp/pytorch-cosine-annealing-with-warmup
-Installing:
-pip install 'git+https://github.com/katsura-jp/pytorch-cosine-annealing-with-warmup'
-Example:
->> from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
->>
->> model = ...
->> optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-5) # lr is min lr
->> scheduler = CosineAnnealingWarmupRestarts(optimizer,
-                                          first_cycle_steps=200,
-                                          cycle_mult=1.0,
-                                          max_lr=0.1,
-                                          min_lr=0.001,
-                                          warmup_steps=50,
-                                          gamma=1.0)
->> for epoch in range(n_epoch):
->>     train()
->>     valid()
->>     scheduler.step()
-
-### Зависимости
-```txt
-transformers>=4.40
-datasets
-scikit-learn
-torch>=2.0
-tqdm
+формат данных:
+sentence - предложение
+entity - объект анализа тональности
+entity_tag - тип сущности в рамках PERSON, ORGANIZATION, PROFESSION, COUNTRY, NATIONALITY
+entity_pos_start_rel - start pos of entity in sentence
+entity_pos_end_rel - end pos of entity in sentence
+то есть, entity = sentence[entity_pos_start_rel:entity_pos_end_rel]
+label - метка тональности (0 - нейтрально, -1 - отрицательно, 1 - положительно)

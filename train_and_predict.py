@@ -1,7 +1,8 @@
 import argparse
 import os
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding, AdamW, get_cosine_schedule_with_warmup
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, DataCollatorWithPadding, get_cosine_schedule_with_warmup
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
 import torch
 from sklearn.metrics import accuracy_score, f1_score
