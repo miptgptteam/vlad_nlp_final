@@ -1,0 +1,6 @@
+transformers>=4.40
+datasets
+scikit-learn
+torch>=2.0
+tqdm
+git+https://github.com/katsura-jp/pytorch-cosine-annealing-with-warmup
