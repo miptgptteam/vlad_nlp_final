@@ -16,3 +16,15 @@ Example:
 python train_and_predict.py --epochs 3 --batch_size 8
 ```
 
+
+## Using Conda
+
+To install dependencies and run the script with conda:
+
+```bash
+conda create -n nlp python=3.10
+conda activate nlp
+pip install -r requirements.txt
+python train_and_predict.py --epochs 3 --batch_size 8
+```
+
