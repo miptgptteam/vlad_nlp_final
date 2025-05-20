@@ -40,3 +40,15 @@ pip install -r requirements.txt
 python train_and_predict.py --epochs 3 --batch_size 8
 ```
 
+
+## Qwen baseline
+
+The repository includes an additional baseline that evaluates sentiment using the Qwen3-8B language model without fine-tuning. It splits the training data into train/validation parts, reports metrics on the validation subset and produces predictions for the test file.
+
+Run the script as follows:
+
+```bash
+python qwen_baseline.py --model_name Qwen/Qwen3-8B
+```
+
+Predictions are saved to `qwen_baseline.csv`.

@@ -3,3 +3,5 @@ datasets
 scikit-learn
 torch>=2.0
 tqdm
+accelerate
+sentencepiece
