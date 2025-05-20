@@ -7,6 +7,7 @@ from transformers import (
     DataCollatorWithPadding,
     get_cosine_schedule_with_warmup,
 )
+from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 import torch
@@ -22,9 +23,10 @@ def parse_args():
     parser.add_argument("--output_dir", default="checkpoints")
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--lr", type=float, default=5e-5)
+    parser.add_argument("--lr", type=float, default=1e-5)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--warmup_steps", type=int, default=50)
+    parser.add_argument("--gamma", type=float, default=1.0)
     return parser.parse_args()
 
 
@@ -72,6 +74,8 @@ def preprocess_datasets(train_ds, valid_ds, test_ds, tokenizer):
         "entity_pos_end_rel",
         "text",
     ]
+    if "label" in test_ds.column_names:
+        test_ds = test_ds.remove_columns(["label"])
     train_ds = train_ds.remove_columns([c for c in remove_cols if c in train_ds.column_names])
     valid_ds = valid_ds.remove_columns([c for c in remove_cols if c in valid_ds.column_names])
     test_ds = test_ds.remove_columns([c for c in remove_cols if c in test_ds.column_names])
@@ -83,12 +87,15 @@ def make_dataloader(ds, tokenizer, batch_size, shuffle=False):
     return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, collate_fn=collator)
 
 
+from sklearn.metrics import f1_score
+
 def compute_metrics(preds, labels):
     preds = torch.argmax(preds, dim=1).cpu().numpy()
     labels = labels.cpu().numpy()
     acc = accuracy_score(labels, preds)
-    f1 = f1_score(labels, preds, average="macro")
-    return acc, f1
+    f1_macro = f1_score(labels, preds, average="macro")
+    f1_pn = f1_score(labels, preds, labels=[0, 2], average="macro")
+    return acc, f1_macro, f1_pn
 
 
 def main():
@@ -121,9 +128,14 @@ def main():
 
     optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     num_training_steps = args.epochs * len(train_loader)
-    scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=num_training_steps)
+    scheduler = CosineAnnealingWarmupRestarts(optimizer,
+                                              first_cycle_steps=max(len(train_ds) // args.batch_size, 1),
+                                              warmup_steps=args.warmup_steps,
+                                              max_lr=args.lr,
+                                              min_lr=args.lr / 100,
+                                              gamma=args.gamma)
 
-    best_f1 = 0
+    best_f1_pn = 0
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0
@@ -152,14 +164,14 @@ def main():
                 all_labels.append(labels)
         preds = torch.cat(all_preds)
         labels = torch.cat(all_labels)
-        acc, f1 = compute_metrics(preds, labels)
-        print(f"Epoch {epoch+1} - Loss: {avg_loss:.4f} - Acc: {acc:.4f} - F1: {f1:.4f}")
+        acc, f1_macro, f1_pn = compute_metrics(preds, labels)
+        print(f"Epoch {epoch+1} - Loss: {avg_loss:.4f} - Acc: {acc:.4f} - F1_macro: {f1_macro:.4f} - F1_pn: {f1_pn:.4f}")
 
-        if f1 > best_f1:
-            best_f1 = f1
+        if f1_pn > best_f1_pn:
+            best_f1_pn = f1_pn
             model.save_pretrained(args.output_dir)
             tokenizer.save_pretrained(args.output_dir)
-            print(f"Saved best model with F1={best_f1:.4f}")
+            print(f"Saved best model with F1_pn={best_f1_pn:.4f}")
 
     # Prediction on test
     model.eval()
@@ -173,10 +185,9 @@ def main():
             preds.extend(batch_preds.cpu().tolist())
 
     labels = [id2label[p] for p in preds]
-    with open("prediction.csv", "w") as f:
-        f.write("id,label\n")
+    with open("data/bert_baseline_prediction.csv", "w") as f:
         for idx, label in enumerate(labels):
-            f.write(f"{idx},{label}\n")
+            f.write(f"{label}\n")
 
 
 if __name__ == "__main__":
